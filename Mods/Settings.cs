@@ -75,9 +75,6 @@ namespace iiMenu.Mods
             shift = false;
             lockShift = false;
 
-            if (isKeyboardPc)
-                lastPressedKeys.Add(KeyCode.Q);
-
             if (!isKeyboardPc)
             {
                 if (VRKeyboard == null)
@@ -4393,7 +4390,7 @@ exit 0";
             Buttons.GetIndex("Change Input Text Color").overlapText = $"Change Input Text Color <color=grey>[</color><color=green>{textColors[inputTextColorInt]}</color><color=grey>]</color>";
         }
 
-        public static void ChangePCUI(bool positive = true)
+        public static void ChangePCGUI(bool positive = true)
         {
             if (positive)
                 pcbg++;
@@ -5480,6 +5477,7 @@ exit 0";
             Canvas.ForceUpdateCanvases();
         }
 
+
         public static void UpdateSearch()
         {
             Transform searchBar = canvas.transform.Find("Main/ModuleTab/Search");
@@ -6060,7 +6058,7 @@ exit 0";
                 ChangeArrowType();
 
                 pcbg = int.Parse(data[13]) - 1;
-                ChangePCUI();
+                ChangePCGUI();
 
                 Important.reconnectDelay = int.Parse(data[14]) - 1;
                 ChangeReconnectTime();

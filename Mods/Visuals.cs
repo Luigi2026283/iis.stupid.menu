@@ -864,19 +864,18 @@ namespace iiMenu.Mods
         }
 
 
-        public static string OverallPlaytime;
-        private static float playtime;
+        public static string OverallPlaytime = "00:00:00";
+        private static float playtimeStart = -1f;
         public static void UpdatePlaytime()
         {
-            CoroutineManager.instance.StartCoroutine(Updateplaytime());
-        }
-        private static IEnumerator Updateplaytime() 
-        {
-            playtime += Time.deltaTime;
+            if (playtimeStart < 0f)
+                playtimeStart = Time.realtimeSinceStartup;
 
-            TimeSpan time = TimeSpan.FromSeconds(playtime);
-            OverallPlaytime = $"{time.Hours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
-            yield return new WaitForSeconds(0.1f);
+            float elapsedSeconds = Mathf.Max(0f, Time.realtimeSinceStartup - playtimeStart);
+            TimeSpan time = TimeSpan.FromSeconds(elapsedSeconds);
+            int totalHours = (int)time.TotalHours;
+
+            OverallPlaytime = $"{totalHours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
         }
 
         public static void ExtraRoomInfo(bool? overlapInRoom = null)
@@ -973,6 +972,94 @@ namespace iiMenu.Mods
             }
 
             NotificationManager.information["Ping"] = (masterRig.GetPing() + PhotonNetwork.GetPing()) + "ms";
+        }
+
+        private static readonly Queue<int> latencySamples = new Queue<int>();
+        private static float nextLatencySampleTime;
+        private static int lastLatencySample = -1;
+        private static int latencyTransitions;
+        private static int latencySpikes;
+        private static float latencySessionStart = -1f;
+        private const float LatencySampleInterval = 0.2f;
+        private const int MaxLatencySamples = 24;
+        private const int SpikeThresholdMs = 25;
+
+        private static string BuildLatencyGraph(int[] samples, int min, int max)
+        {
+            if (samples.Length == 0)
+                return "-";
+
+            const string palette = "._-:=+*#%@";
+            float range = Mathf.Max(1f, max - min);
+            char[] graph = new char[samples.Length];
+
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float normalized = (samples[i] - min) / range;
+                int index = Mathf.Clamp(Mathf.RoundToInt(normalized * (palette.Length - 1)), 0, palette.Length - 1);
+                graph[i] = palette[index];
+            }
+
+            return new string(graph);
+        }
+
+        public static void LatencyDebugOverlayPlus()
+        {
+            if (latencySessionStart < 0f)
+                latencySessionStart = Time.unscaledTime;
+
+            if (Time.unscaledTime >= nextLatencySampleTime || latencySamples.Count == 0)
+            {
+                int ping = Mathf.Max(0, PhotonNetwork.GetPing());
+
+                if (lastLatencySample >= 0)
+                {
+                    latencyTransitions++;
+                    if (Mathf.Abs(ping - lastLatencySample) >= SpikeThresholdMs)
+                        latencySpikes++;
+                }
+
+                lastLatencySample = ping;
+                latencySamples.Enqueue(ping);
+                while (latencySamples.Count > MaxLatencySamples)
+                    latencySamples.Dequeue();
+
+                nextLatencySampleTime = Time.unscaledTime + LatencySampleInterval;
+            }
+
+            int[] samples = latencySamples.ToArray();
+            int current = samples.Length > 0 ? samples[^1] : Mathf.Max(0, PhotonNetwork.GetPing());
+            int min = samples.Length > 0 ? samples.Min() : current;
+            int max = samples.Length > 0 ? samples.Max() : current;
+            float average = samples.Length > 0 ? (float)samples.Average() : current;
+
+            float jitter = 0f;
+            if (samples.Length > 1)
+            {
+                int deltaTotal = 0;
+                for (int i = 1; i < samples.Length; i++)
+                    deltaTotal += Mathf.Abs(samples[i] - samples[i - 1]);
+                jitter = (float)deltaTotal / (samples.Length - 1);
+            }
+
+            float spikeRate = latencyTransitions > 0 ? (float)latencySpikes / latencyTransitions * 100f : 0f;
+
+            NotificationManager.information["Ping"] = $"{current}ms";
+            NotificationManager.information["Avg Ping"] = $"{average:F0}ms";
+            NotificationManager.information["Jitter"] = $"{jitter:F1}ms";
+            NotificationManager.information["Spike Rate"] = $"{spikeRate:F0}%";
+            NotificationManager.information["Range"] = $"{min}-{max}ms";
+            NotificationManager.information["Latency Graph"] = BuildLatencyGraph(samples, min, max);
+        }
+
+        public static void DisableLatencyDebugOverlayPlus()
+        {
+            NotificationManager.information.Remove("Ping");
+            NotificationManager.information.Remove("Avg Ping");
+            NotificationManager.information.Remove("Jitter");
+            NotificationManager.information.Remove("Spike Rate");
+            NotificationManager.information.Remove("Range");
+            NotificationManager.information.Remove("Latency Graph");
         }
 
         public static void NearbyTaggerOverlay()

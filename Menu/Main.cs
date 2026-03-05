@@ -353,7 +353,7 @@ namespace iiMenu.Menu
                     { 4, rightJoystickClick }
                 };
 
-                bool isKeyboardCondition = UnityInput.Current.GetKey(KeyCode.Q) || (inTextInput && isKeyboardPc);
+                bool isKeyboardCondition = inTextInput && isKeyboardPc;
                 bool buttonCondition = rightHand ? rightInputs[menuButtonIndex] : leftInputs[menuButtonIndex];
 
                 if (oneHand)
@@ -1805,7 +1805,7 @@ namespace iiMenu.Menu
             if (!method.label)
             {
                 GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+                if (!isKeyboardPc)
                     buttonObject.layer = 2;
 
                 buttonObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -2012,7 +2012,7 @@ namespace iiMenu.Menu
         private static void AddSearchButton()
         {
             GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+            if (!isKeyboardPc)
                 buttonObject.layer = 2;
 
             buttonObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -2158,7 +2158,7 @@ namespace iiMenu.Menu
             bool infoScreenEnabled = Buttons.GetIndex("Info Screen").enabled;
 
             GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+            if (!isKeyboardPc)
                 buttonObject.layer = 2;
 
             buttonObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -2206,7 +2206,7 @@ namespace iiMenu.Menu
         private static void AddDonateButton()
         {
             GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+            if (!isKeyboardPc)
                 buttonObject.layer = 2;
 
             buttonObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -2254,7 +2254,7 @@ namespace iiMenu.Menu
         private static void AddUpdateButton()
         {
             GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+            if (!isKeyboardPc)
                 buttonObject.layer = 2;
 
             buttonObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -2302,7 +2302,7 @@ namespace iiMenu.Menu
         private static void AddReturnButton(bool offcenteredPosition)
         {
             GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+            if (!isKeyboardPc)
                 buttonObject.layer = 2;
 
             buttonObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -2364,7 +2364,7 @@ namespace iiMenu.Menu
             if (!method.label)
             {
                 GameObject buttonObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+                if (!isKeyboardPc)
                     buttonObject.layer = 2;
 
                 buttonObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -2861,7 +2861,7 @@ namespace iiMenu.Menu
             if (inTextInput)
             {
                 GameObject searchBoxObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                if (!UnityInput.Current.GetKey(KeyCode.Q) && !isKeyboardPc)
+                if (!isKeyboardPc)
                     searchBoxObject.layer = 2;
 
                 searchBoxObject.GetComponent<BoxCollider>().isTrigger = true;
@@ -3096,7 +3096,7 @@ namespace iiMenu.Menu
         private static Quaternion? recenterRotation;
         public static void RecenterMenu()
         {
-            bool isKeyboardCondition = UnityInput.Current.GetKey(KeyCode.Q) || (inTextInput && isKeyboardPc);
+            bool isKeyboardCondition = inTextInput && isKeyboardPc;
             if (clickGUI)
             {
                 if (recenterPosition == null || Vector3.Distance(recenterPosition.Value, GorillaTagger.Instance.bodyCollider.transform.TransformPoint(new Vector3(0f, 0f, 1.5f))) > 1f)
@@ -3661,7 +3661,7 @@ namespace iiMenu.Menu
             {
                 GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
-                if (!UnityInput.Current.GetKey(KeyCode.Q) && !(inTextInput && isKeyboardPc))
+                if (!(inTextInput && isKeyboardPc))
                     button.layer = 2;
 
                 button.GetComponent<BoxCollider>().isTrigger = true;
@@ -3721,7 +3721,7 @@ namespace iiMenu.Menu
             {
                 GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
-                if (!UnityInput.Current.GetKey(KeyCode.Q) && !(inTextInput && isKeyboardPc))
+                if (!(inTextInput && isKeyboardPc))
                     button.layer = 2;
 
                 button.GetComponent<BoxCollider>().isTrigger = true;
@@ -3797,7 +3797,7 @@ namespace iiMenu.Menu
         {
             GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
-            if (!UnityInput.Current.GetKey(KeyCode.Q) && !(inTextInput && isKeyboardPc))
+            if (!(inTextInput && isKeyboardPc))
                 button.layer = 2;
 
             button.GetComponent<BoxCollider>().isTrigger = true;
@@ -7007,7 +7007,7 @@ jgs \_   _/ |Oo\
         public static readonly List<string> skipButtons = new List<string> { };
         public static bool translate;
 
-        public static string serverLink = "https://discord.gg/iidk";
+        public static string serverLink = "https://discord.gg/xUQDd7E2U";
 
         public static int arrowType;
         public static readonly string[][] arrowTypes = {

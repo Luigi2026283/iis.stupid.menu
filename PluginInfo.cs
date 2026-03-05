@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ii's Stupid Menu  PluginInfo.cs
  * A mod menu for Gorilla Tag with over 1000+ mods
  *
@@ -23,11 +23,11 @@ namespace iiMenu
 {
     public class PluginInfo
     {
-        public const string GUID = "org.luigi.gorillatag.";
+        public const string GUID = "org.iidk.gorillatag.iimenu";
         public const string Name = "ii's Stupid Menu";
-        public const string Description = "Updated by @luigi with love <3";
-        public const string BuildTimestamp = "2026-02-23T03:36:03Z";
-        public const string Version = "8.3.0";
+        public const string Description = "Created by @crimsoncauldron with love <3";
+        public const string BuildTimestamp = "2026-03-05T18:17:45Z";
+        public const string Version = "8.3.5";
 
         public const string BaseDirectory = "iisStupidMenu";
         public const string ClientResourcePath = "iiMenu.Resources.Client";
