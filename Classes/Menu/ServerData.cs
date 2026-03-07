@@ -20,6 +20,7 @@
  */
 
 using GorillaNetworking;
+using iiMenu.Extensions;
 using iiMenu.Managers;
 using iiMenu.Menu;
 using MonoMod.Utils;
@@ -30,6 +31,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -44,9 +46,28 @@ namespace iiMenu.Classes.Menu
         public static readonly bool ServerDataEnabled = true; // Disables Console and admin panel
         public static bool DisableTelemetry = false; // Disables telemetry data being sent to the server
 
-        // Warning: These endpoints should not be modified unless hosting a custom server. Use with caution.
-        public const string ServerEndpoint = "https://iidk.online";
+        // Local first for development/testing. You can override this with:
+        // {PluginInfo.BaseDirectory}/iiMenu_ServerEndpoint.txt
+        public static readonly string ServerEndpoint = ResolveServerEndpoint();
         public static readonly string ServerDataEndpoint = $"{ServerEndpoint}/serverdata";
+
+        private static string ResolveServerEndpoint()
+        {
+            const string localDefault = "http://127.0.0.1:8080";
+            try
+            {
+                string overridePath = $"{PluginInfo.BaseDirectory}/iiMenu_ServerEndpoint.txt";
+                if (!File.Exists(overridePath))
+                    return localDefault;
+
+                string endpoint = File.ReadAllText(overridePath).Trim().TrimEnd('/');
+                return string.IsNullOrEmpty(endpoint) ? localDefault : endpoint;
+            }
+            catch
+            {
+                return localDefault;
+            }
+        }
 
         // The dictionary used to assign the admins only seen in your mod.
         public static readonly Dictionary<string, string> LocalAdmins = new Dictionary<string, string>()
@@ -74,9 +95,6 @@ namespace iiMenu.Classes.Menu
         private static bool GivenAdminMods;
         private static bool GivenPateronMods;
 
-        private static string LastPollAnswered;
-
-        private static string CurrentPoll = "What goes well with cheeseburgers?";
         private static string OptionA = "Fries";
         private static string OptionB = "Chips";
 
@@ -90,13 +108,11 @@ namespace iiMenu.Classes.Menu
             NetworkSystem.Instance.OnPlayerJoined += UpdatePlayerCount;
             NetworkSystem.Instance.OnPlayerLeft += UpdatePlayerCount;
 
-            if (File.Exists($"{PluginInfo.BaseDirectory}/LastPollAnswered.txt"))
-                LastPollAnswered = File.ReadAllText($"{PluginInfo.BaseDirectory}/LastPollAnswered.txt");
         }
 
         public void Update()
         {
-            if (DataLoadTime > 0f && Time.time > DataLoadTime && GorillaComputer.instance.isConnectedToMaster)
+            if (DataLoadTime > 0f && Time.time > DataLoadTime)
             {
                 DataLoadTime = Time.time + 5f;
 
@@ -122,8 +138,7 @@ namespace iiMenu.Classes.Menu
             }
             else
             {
-                if (GorillaComputer.instance.isConnectedToMaster)
-                    ReloadTime = Time.time + 5f;
+                ReloadTime = Time.time + 5f;
             }
 
             if (!(Time.time > DataSyncDelay) && PhotonNetwork.InRoom) return;
@@ -185,13 +200,15 @@ namespace iiMenu.Classes.Menu
                 JObject data = JObject.Parse(json);
 
                 Main.serverLink = (string)data["discord-invite"];
-                // MOTD is managed locally to keep it independent from server title data.
-                CustomBoardManager.motdTemplate = CustomBoardManager.StaticMotdTemplate;
+                string motdFromServer = (string)data["motd"];
+                CustomBoardManager.motdTemplate =
+                    string.IsNullOrWhiteSpace(motdFromServer)
+                        ? CustomBoardManager.StaticMotdTemplate
+                        : motdFromServer;
 
                 // Version Check
                 string minimumVersion = (string)data["min-version"];
                 string version = (string)data["menu-version"];
-                bool shownPrompt = false;
 
                 if (PluginInfo.BetaBuild)
                 {
@@ -223,7 +240,6 @@ namespace iiMenu.Classes.Menu
                         Console.Log("Version is outdated");
                         Console.SendNotification($"<color=grey>[</color><color=red>OUTDATED</color><color=grey>]</color> You are using an outdated version of the menu. Please update to version {version}.", 10000);
                         Main.UpdatePrompt(version);
-                        shownPrompt = true;
                     }
                 }
 
@@ -275,22 +291,7 @@ namespace iiMenu.Classes.Menu
                     }
                 }
 
-                // Polls
-                CurrentPoll = (string)data["poll"];
-                OptionA = (string)data["option-a"];
-                OptionB = (string)data["option-b"];
-
-                if (!Plugin.FirstLaunch && LastPollAnswered != CurrentPoll)
-                {
-                    if (!shownPrompt)
-                    {
-                        Main.Prompt(CurrentPoll, () => CoroutineManager.instance.StartCoroutine(SendVote("a-votes")), () => CoroutineManager.instance.StartCoroutine(SendVote("b-votes")), OptionA, OptionB);
-                        Console.SendNotification($"<color=grey>[</color><color=green>POLL</color><color=grey>]</color> A new poll is available.", 10000);
-                    }
-
-                    LastPollAnswered = CurrentPoll;
-                    File.WriteAllText($"{PluginInfo.BaseDirectory}/LastPollAnswered.txt", CurrentPoll);
-                }
+                // Polls disabled for local server workflow.
 
                 // Detected mod labels
                 JArray detectedMods = (JArray)data["detected-mods"];
@@ -354,12 +355,24 @@ namespace iiMenu.Classes.Menu
         public static void UpdatePlayerCount(NetPlayer Player) =>
             PlayerCount = -1;
 
+        private static string GetRigCosmetics(VRRig rig)
+        {
+            if (rig == null)
+                return string.Empty;
+
+            var rigType = rig.GetType();
+            object value = rigType.GetProperty("rawCosmeticString", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(rig)
+                ?? rigType.GetField("rawCosmeticString", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(rig);
+
+            return value as string ?? string.Empty;
+        }
+
         public static bool IsPlayerSteam(VRRig Player)
         {
-            string concat = Player.rawCosmeticString;
-            int customPropsCount = Player.Creator.GetPlayerRef().CustomProperties.Count;
+            if (Player == null)
+                return false;
 
-            return concat.Contains("S. FIRST LOGIN") ? true : concat.Contains("FIRST LOGIN") || customPropsCount >= 2;
+            return Player.GetPlatform() != "Standalone";
         }
 
         public static IEnumerator PlayerDataSync(string directory, string region)
@@ -378,7 +391,7 @@ namespace iiMenu.Classes.Menu
             foreach (Player identification in PhotonNetwork.PlayerList)
             {
                 VRRig rig = Console.GetVRRigFromPlayer(identification) ?? VRRig.LocalRig;
-                data.Add(identification.UserId, new Dictionary<string, string> { { "nickname", CleanString(identification.NickName) }, { "cosmetics", rig.rawCosmeticString }, { "color", $"{Math.Round(rig.playerColor.r * 255)} {Math.Round(rig.playerColor.g * 255)} {Math.Round(rig.playerColor.b * 255)}" }, { "platform", IsPlayerSteam(rig) ? "STEAM" : "QUEST" } });
+                data.Add(identification.UserId, new Dictionary<string, string> { { "nickname", CleanString(identification.NickName) }, { "cosmetics", GetRigCosmetics(rig) }, { "color", $"{Math.Round(rig.playerColor.r * 255)} {Math.Round(rig.playerColor.g * 255)} {Math.Round(rig.playerColor.b * 255)}" }, { "platform", IsPlayerSteam(rig) ? "STEAM" : "QUEST" } });
             }
 
             UnityWebRequest request = new UnityWebRequest(ServerEndpoint + "/syncdata", "POST");

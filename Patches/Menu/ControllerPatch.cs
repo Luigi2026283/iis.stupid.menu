@@ -20,13 +20,42 @@
  */
 
 using HarmonyLib;
+using System;
+using System.Linq;
+using System.Reflection;
 
 namespace iiMenu.Patches.Menu
 {
-    [HarmonyPatch(typeof(ConnectedControllerHandler), nameof(ConnectedControllerHandler.DeviceDisconnected))]
+    [HarmonyPatch(typeof(ConnectedControllerHandler))]
     public class ControllerPatch
     {
         public static bool enabled;
-        public static bool Prefix(UnityEngine.XR.InputDevice device) => !enabled;
+        
+        private static MethodBase TargetMethod()
+        {
+            Type handlerType = typeof(ConnectedControllerHandler);
+            string[] candidates =
+            {
+                "DeviceDisconnected",
+                "OnDeviceDisconnected",
+                "HandleDeviceDisconnected",
+                "DeviceConnectionChanged"
+            };
+
+            foreach (string candidate in candidates)
+            {
+                MethodInfo method = AccessTools.Method(handlerType, candidate);
+                if (method != null)
+                    return method;
+            }
+
+            return handlerType
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .FirstOrDefault(method =>
+                    method.Name.Contains("Disconnected") ||
+                    method.Name.Contains("ConnectionChanged"));
+        }
+
+        public static bool Prefix() => !enabled;
     }
 }

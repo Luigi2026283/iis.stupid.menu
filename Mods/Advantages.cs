@@ -28,6 +28,7 @@ using iiMenu.Menu;
 using iiMenu.Patches.Menu;
 using Photon.Pun;
 using Photon.Realtime;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -36,11 +37,47 @@ using static iiMenu.Utilities.GameModeUtilities;
 using static iiMenu.Utilities.RandomUtilities;
 using static iiMenu.Utilities.RigUtilities;
 
+using iiMenu.Utilities;
 namespace iiMenu.Mods
 {
     public static class Advantages
     {
         public static bool instantTag;
+
+        private static void TrySetTagRadiusOverride(float radius, int frame)
+        {
+            var tagger = GorillaTagger.Instance;
+            if (tagger == null)
+                return;
+
+            var taggerType = tagger.GetType();
+            FieldInfo radiusField = taggerType.GetField("tagRadiusOverride", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            FieldInfo frameField = taggerType.GetField("tagRadiusOverrideFrame", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            PropertyInfo radiusProperty = radiusField == null ? taggerType.GetProperty("tagRadiusOverride", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) : null;
+            PropertyInfo frameProperty = frameField == null ? taggerType.GetProperty("tagRadiusOverrideFrame", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) : null;
+
+            if (radiusField != null)
+                radiusField.SetValue(tagger, radius);
+            else if (radiusProperty?.CanWrite == true)
+                radiusProperty.SetValue(tagger, radius);
+
+            if (frameField != null)
+                frameField.SetValue(tagger, frame);
+            else if (frameProperty?.CanWrite == true)
+                frameProperty.SetValue(tagger, frame);
+        }
+
+        private static void ReportSlingshotHitCompat(NetPlayer target, Vector3 position, int hitIndex)
+        {
+            PropertyInfo activeNetworkHandlerProp = typeof(GameMode).GetProperty("ActiveNetworkHandler", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            object activeNetworkHandler = activeNetworkHandlerProp?.GetValue(null);
+            if (activeNetworkHandler == null)
+                return;
+
+            MethodInfo sendRpcMethod = activeNetworkHandler.GetType().GetMethod("SendRPC", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            sendRpcMethod?.Invoke(activeNetworkHandler, new object[] { "RPC_ReportSlingshotHit", false, NetPlayerToPlayer(target), position, hitIndex });
+        }
 
         public static void TagSelf()
         {
@@ -63,7 +100,7 @@ namespace iiMenu.Mods
                 }
                 else
                 {
-                    VRRig rig = GorillaParent.instance.vrrigs
+                    VRRig rig = GorillaParent.instance.GetRigs()
                         .Where(r => !r.IsLocal() && r.IsTagged())
                         .OrderBy(r => Vector3.Distance(
                                         r.transform.position,
@@ -393,7 +430,7 @@ namespace iiMenu.Mods
 
         public static void TagAura()
         {
-            foreach (var vrrig in GorillaParent.instance.vrrigs.Where(vrrig => VRRig.LocalRig.IsTagged() && !vrrig.IsTagged() && !GTPlayer.Instance.disableMovement && Vector3.Distance(vrrig.headMesh.transform.position, GorillaTagger.Instance.bodyCollider.transform.position) < tagAuraDistance))
+            foreach (var vrrig in GorillaParent.instance.GetRigs().Where(vrrig => VRRig.LocalRig.IsTagged() && !vrrig.IsTagged() && !GTPlayer.Instance.disableMovement && Vector3.Distance(vrrig.headMesh.transform.position, GorillaTagger.Instance.bodyCollider.transform.position) < tagAuraDistance))
                 ReportTag(vrrig);
         }
 
@@ -405,7 +442,7 @@ namespace iiMenu.Mods
 
         public static void TagAuraPlayer(VRRig giving)
         {
-            foreach (var vrrig in from vrrig in GorillaParent.instance.vrrigs let distance = Vector3.Distance(vrrig.headMesh.transform.position, giving.transform.position) where giving.IsTagged() && !vrrig.IsTagged() && !GTPlayer.Instance.disableMovement && distance < tagAuraDistance && !VRRig.LocalRig.IsLocal() && VRRig.LocalRig.IsTagged() select vrrig)
+            foreach (var vrrig in from vrrig in GorillaParent.instance.GetRigs() let distance = Vector3.Distance(vrrig.headMesh.transform.position, giving.transform.position) where giving.IsTagged() && !vrrig.IsTagged() && !GTPlayer.Instance.disableMovement && distance < tagAuraDistance && !VRRig.LocalRig.IsLocal() && VRRig.LocalRig.IsTagged() select vrrig)
                 TagPlayer(GetPlayerFromVRRig(vrrig));
         }
 
@@ -438,7 +475,7 @@ namespace iiMenu.Mods
 
         public static void TagAuraAll()
         {
-            foreach (VRRig vrrig in GorillaParent.instance.vrrigs)
+            foreach (VRRig vrrig in GorillaParent.instance.GetRigs())
                 TagAuraPlayer(vrrig);
         }
 
@@ -447,8 +484,7 @@ namespace iiMenu.Mods
             if (!VRRig.LocalRig.IsTagged()) return;
             GorillaTagger.Instance.maxTagDistance = float.MaxValue;
 
-            GorillaTagger.Instance.tagRadiusOverride = tagReachDistance;
-            GorillaTagger.Instance.tagRadiusOverrideFrame = Time.frameCount + 16;
+            TrySetTagRadiusOverride(tagReachDistance, Time.frameCount + 16);
 
             if (!Buttons.GetIndex("Visualize Tag Reach").enabled) return;
             Visuals.VisualizeAura(GorillaTagger.Instance.leftHandTransform.position, tagReachDistance, backgroundColor.GetCurrentColor(), -149286);
@@ -691,10 +727,10 @@ namespace iiMenu.Mods
                 }
                 else
                 {
-                    bool isInfectedPlayers = GorillaParent.instance.vrrigs.Any(vrrig => !vrrig.IsTagged());
+                    bool isInfectedPlayers = GorillaParent.instance.GetRigs().Any(vrrig => !vrrig.IsTagged());
                     if (isInfectedPlayers)
                     {
-                        foreach (var vrrig in GorillaParent.instance.vrrigs.Where(vrrig => !vrrig.IsTagged()))
+                        foreach (var vrrig in GorillaParent.instance.GetRigs().Where(vrrig => !vrrig.IsTagged()))
                         {
                             VRRig.LocalRig.enabled = false;
 
@@ -791,7 +827,7 @@ namespace iiMenu.Mods
 
             Vector3 archiveRigPosition = VRRig.LocalRig.transform.position;
 
-            foreach (var vrrig in GorillaParent.instance.vrrigs.Where(vrrig => !vrrig.IsTagged()))
+            foreach (var vrrig in GorillaParent.instance.GetRigs().Where(vrrig => !vrrig.IsTagged()))
             {
                 VRRig.LocalRig.transform.position = vrrig.transform.position;
                 SendSerialize(GorillaTagger.Instance.myVRRig.GetView, new RaiseEventOptions { TargetActors = new[] { PhotonNetwork.MasterClient.ActorNumber } });
@@ -1068,7 +1104,7 @@ namespace iiMenu.Mods
                 paintbrawlKillDelays[Target.ActorNumber] = Time.time + 3.1f;
 
                 VRRig rig = GetVRRigFromPlayer(Target);
-                GameMode.ActiveNetworkHandler.SendRPC("RPC_ReportSlingshotHit", false, NetPlayerToPlayer(Target), rig.transform.position, paintbrawlKillIndex);
+                ReportSlingshotHitCompat(Target, rig.transform.position, paintbrawlKillIndex);
                 RPCProtection();
 
                 paintbrawlKillIndex++;
@@ -1186,3 +1222,5 @@ namespace iiMenu.Mods
         }
     }
 }
+
+

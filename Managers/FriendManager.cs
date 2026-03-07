@@ -24,6 +24,7 @@ using GorillaExtensions;
 using GorillaLocomotion;
 using GorillaNetworking;
 using iiMenu.Classes.Menu;
+using iiMenu.Extensions;
 using iiMenu.Menu;
 using iiMenu.Mods;
 using iiMenu.Utilities;
@@ -129,7 +130,7 @@ namespace iiMenu.Managers
 
             List<VRRig> toRemoveRigs = new List<VRRig>();
 
-            foreach (var star in starPool.Where(star => !GorillaParent.instance.vrrigs.Contains(star.Key) || !IsPlayerFriend(GetPlayerFromVRRig(star.Key))))
+            foreach (var star in starPool.Where(star => !GorillaParent.instance.GetRigs().Contains(star.Key) || !IsPlayerFriend(GetPlayerFromVRRig(star.Key))))
             {
                 toRemoveRigs.Add(star.Key);
                 Destroy(star.Value);
@@ -300,7 +301,7 @@ namespace iiMenu.Managers
                 {
                     List<VRRig> toRemove = new List<VRRig>();
 
-                    foreach (var platform in PlatformDictionary.Where(Platform => !GorillaParent.instance.vrrigs.Contains(Platform.Key)))
+                    foreach (var platform in PlatformDictionary.Where(Platform => !GorillaParent.instance.GetRigs().Contains(Platform.Key)))
                     {
                         toRemove.Add(platform.Key);
                         Destroy(platform.Value);
@@ -687,11 +688,33 @@ namespace iiMenu.Managers
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
-                FriendResponse = request.downloadHandler.text;
+            {
+                string responseText = request.downloadHandler?.text;
+                if (!responseText.IsNullOrEmpty())
+                    FriendResponse = responseText;
+            }
             else
                 LogManager.Log("Friend data could not be loaded");
 
-            Friends = JsonConvert.DeserializeObject<FriendData>(FriendResponse);
+            FriendData parsed = null;
+            if (!FriendResponse.IsNullOrEmpty())
+            {
+                try
+                {
+                    parsed = JsonConvert.DeserializeObject<FriendData>(FriendResponse);
+                }
+                catch (Exception exception)
+                {
+                    LogManager.LogError($"Could not parse friend data: {exception.Message}");
+                }
+            }
+
+            Friends = parsed ?? new FriendData
+            {
+                friends = new Dictionary<string, FriendData.Friend>(),
+                incoming = new Dictionary<string, FriendData.PendingFriend>(),
+                outgoing = new Dictionary<string, FriendData.PendingFriend>()
+            };
             FriendsListUpdated();
         }
 
@@ -931,6 +954,11 @@ namespace iiMenu.Managers
 
         public static void FriendsListUpdated()
         {
+            instance.Friends ??= new FriendData();
+            instance.Friends.friends ??= new Dictionary<string, FriendData.Friend>();
+            instance.Friends.incoming ??= new Dictionary<string, FriendData.PendingFriend>();
+            instance.Friends.outgoing ??= new Dictionary<string, FriendData.PendingFriend>();
+
             FriendData.Friend[] onlineFriends = instance.Friends.friends.Values
                 .Where(friend => friend.online)
                 .OrderBy(friend => friend.currentName)
@@ -1550,3 +1578,4 @@ namespace iiMenu.Managers
         #endregion
     }
 }
+

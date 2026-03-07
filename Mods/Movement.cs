@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ii's Stupid Menu  Mods/Movement.cs
  * A mod menu for Gorilla Tag with over 1000+ mods
  *
@@ -219,6 +219,18 @@ namespace iiMenu.Mods
 
         public static int longarmCycle = 2;
         public static float armlength = 1.25f;
+
+        private static void TranslateLocalPlayer(Vector3 delta)
+        {
+            if (delta == Vector3.zero)
+                return;
+
+            Rigidbody body = GorillaTagger.Instance?.rigidbody;
+            if (body != null)
+                body.position += delta;
+            else if (GTPlayer.Instance != null)
+                GTPlayer.Instance.transform.position += delta;
+        }
 
         public static GameObject leftplat;
         public static GameObject rightplat;
@@ -447,7 +459,7 @@ namespace iiMenu.Mods
         {
             if (rightPrimary)
             {
-                GTPlayer.Instance.transform.position += GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * FlySpeed);
+                TranslateLocalPlayer(GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * FlySpeed));
                 GorillaTagger.Instance.rigidbody.linearVelocity = Vector3.zero;
             }
         }
@@ -456,7 +468,7 @@ namespace iiMenu.Mods
         {
             if (rightTrigger > 0.5f)
             {
-                GTPlayer.Instance.transform.position += GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * FlySpeed);
+                TranslateLocalPlayer(GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * FlySpeed));
                 GorillaTagger.Instance.rigidbody.linearVelocity = Vector3.zero;
             }
         }
@@ -466,7 +478,7 @@ namespace iiMenu.Mods
         {
             if (rightPrimary)
             {
-                GTPlayer.Instance.transform.position += GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * FlySpeed);
+                TranslateLocalPlayer(GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * FlySpeed));
                 GorillaTagger.Instance.rigidbody.linearVelocity = Vector3.zero;
                 if (!noclip)
                 {
@@ -489,7 +501,10 @@ namespace iiMenu.Mods
 
             if (Mathf.Abs(joy.x) > 0.3 || Mathf.Abs(joy.y) > 0.3)
             {
-                GTPlayer.Instance.transform.position += GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * (joy.y * FlySpeed)) + GorillaTagger.Instance.headCollider.transform.right * (Time.deltaTime * (joy.x * FlySpeed));
+                TranslateLocalPlayer(
+                    GorillaTagger.Instance.headCollider.transform.forward * (Time.deltaTime * (joy.y * FlySpeed)) +
+                    GorillaTagger.Instance.headCollider.transform.right * (Time.deltaTime * (joy.x * FlySpeed))
+                );
                 GorillaTagger.Instance.rigidbody.linearVelocity = Vector3.zero;
             }
         }
@@ -519,7 +534,7 @@ namespace iiMenu.Mods
         {
             if (rightPrimary)
             {
-                GTPlayer.Instance.transform.position += ControllerUtilities.GetTrueRightHand().forward * (Time.deltaTime * FlySpeed);
+                TranslateLocalPlayer(ControllerUtilities.GetTrueRightHand().forward * (Time.deltaTime * FlySpeed));
                 GorillaTagger.Instance.rigidbody.linearVelocity = Vector3.zero;
             }
         }
@@ -533,7 +548,7 @@ namespace iiMenu.Mods
 
                 if (gunLocked && lockTarget != null)
                 {
-                    GTPlayer.Instance.transform.position += (lockTarget.transform.position - GorillaTagger.Instance.bodyCollider.transform.position) * (Time.deltaTime * FlySpeed);
+                    TranslateLocalPlayer((lockTarget.transform.position - GorillaTagger.Instance.bodyCollider.transform.position) * (Time.deltaTime * FlySpeed));
                     GorillaTagger.Instance.rigidbody.linearVelocity = Vector3.zero;
                 }
 
@@ -2789,7 +2804,7 @@ namespace iiMenu.Mods
         {
             bool isTagged = VRRig.LocalRig.IsTagged();
 
-            VRRig closestRig = GorillaParent.instance.vrrigs
+            VRRig closestRig = GorillaParent.instance.GetRigs()
                 .Where(rig => rig != null && !rig.isLocal && 
                                   (isTagged ? !rig.IsTagged() : rig.IsTagged()))
                 .OrderBy(rig => Vector3.Distance(rig.transform.position, GorillaTagger.Instance.bodyCollider.transform.position))
@@ -3557,7 +3572,7 @@ namespace iiMenu.Mods
 
         public static void EyeContact()
         {
-            foreach (VRRig rig in GorillaParent.instance.vrrigs.Where(rig => !rig.IsLocal()))
+            foreach (VRRig rig in GorillaParent.instance.GetRigs().Where(rig => !rig.IsLocal()))
             {
                 if (Physics.SphereCast(rig.headMesh.transform.position + (rig.headMesh.transform.forward * 0.25f), 0.25f, rig.headMesh.transform.forward, out _, 512f, NoInvisLayerMask()))
                 {
@@ -3754,7 +3769,7 @@ namespace iiMenu.Mods
         public static void PunchMod()
         {
             int index = -1;
-            foreach (var vrrig in GorillaParent.instance.vrrigs.Where(vrrig => !vrrig.isLocal))
+            foreach (var vrrig in GorillaParent.instance.GetRigs().Where(vrrig => !vrrig.isLocal))
             {
                 index++;
 
@@ -3784,7 +3799,7 @@ namespace iiMenu.Mods
         {
             if (sithlord == null)
             {
-                foreach (VRRig vrrig in GorillaParent.instance.vrrigs)
+                foreach (VRRig vrrig in GorillaParent.instance.GetRigs())
                 {
                     try
                     {
@@ -3838,7 +3853,7 @@ namespace iiMenu.Mods
         public static void SafetyBubble()
         {
             foreach (VRRig rig in 
-                GorillaParent.instance.vrrigs
+                GorillaParent.instance.GetRigs()
                     .Where(rig => rig != null && !rig.isLocal)
                     .OrderBy(rig => Vector3.Distance(rig.transform.position, GorillaTagger.Instance.bodyCollider.transform.position)))
             {
@@ -3858,7 +3873,7 @@ namespace iiMenu.Mods
             List<VRRig> toRemove = new List<VRRig>();
             foreach (VRRig rig in RigColliders.Keys)
             {
-                if (!GorillaParent.instance.vrrigs.Contains(rig))
+                if (!GorillaParent.instance.GetRigs().Contains(rig))
                     toRemove.Add(rig);
             }
 
@@ -3870,7 +3885,7 @@ namespace iiMenu.Mods
 
             toRemove.Clear();
 
-            foreach (var vrrig in GorillaParent.instance.vrrigs.Where(vrrig => !vrrig.isLocal))
+            foreach (var vrrig in GorillaParent.instance.GetRigs().Where(vrrig => !vrrig.isLocal))
             {
                 if (!RigColliders.TryGetValue(vrrig, out List<GameObject> colliders))
                 {
@@ -4298,7 +4313,7 @@ namespace iiMenu.Mods
         {
             bool isTagged = VRRig.LocalRig.IsTagged();
 
-            VRRig closestRig = GorillaParent.instance.vrrigs
+            VRRig closestRig = GorillaParent.instance.GetRigs()
                 .Where(rig => rig != null && !rig.isLocal &&
                                   (isTagged ? !rig.IsTagged() : rig.IsTagged()))
                 .OrderBy(rig => Vector3.Distance(rig.transform.position, GorillaTagger.Instance.bodyCollider.transform.position))
@@ -6061,3 +6076,4 @@ namespace iiMenu.Mods
         }
     }
 }
+

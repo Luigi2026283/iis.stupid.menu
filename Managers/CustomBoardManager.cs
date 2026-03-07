@@ -24,6 +24,7 @@ using iiMenu.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -34,6 +35,61 @@ namespace iiMenu.Managers
     public class CustomBoardManager : MonoBehaviour
     {
         public static CustomBoardManager instance;
+
+        private static IEnumerable<GorillaNetworkJoinTrigger> GetJoinTriggers()
+        {
+            if (PhotonNetworkController.Instance == null)
+                return Array.Empty<GorillaNetworkJoinTrigger>();
+
+            FieldInfo field = typeof(PhotonNetworkController).GetField("allJoinTriggers", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field?.GetValue(PhotonNetworkController.Instance) is IEnumerable<GorillaNetworkJoinTrigger> joinTriggers)
+                return joinTriggers;
+
+            return FindObjectsByType<GorillaNetworkJoinTrigger>(FindObjectsSortMode.None);
+        }
+
+        private static JoinTriggerUI GetJoinTriggerUI(GorillaNetworkJoinTrigger joinTrigger)
+        {
+            if (joinTrigger == null)
+                return null;
+
+            FieldInfo field = joinTrigger.GetType().GetField("ui", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field?.GetValue(joinTrigger) is JoinTriggerUI uiFromField)
+                return uiFromField;
+
+            PropertyInfo property = joinTrigger.GetType().GetProperty("ui", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return property?.GetValue(joinTrigger) as JoinTriggerUI;
+        }
+
+        private static JoinTriggerUITemplate GetJoinTriggerTemplate(JoinTriggerUI ui)
+        {
+            if (ui == null)
+                return null;
+
+            FieldInfo field = ui.GetType().GetField("template", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field?.GetValue(ui) is JoinTriggerUITemplate templateFromField)
+                return templateFromField;
+
+            PropertyInfo property = ui.GetType().GetProperty("template", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return property?.GetValue(ui) as JoinTriggerUITemplate;
+        }
+
+        private static TextMeshPro GetJoinTriggerText(JoinTriggerUI ui)
+        {
+            if (ui == null)
+                return null;
+
+            FieldInfo field = ui.GetType().GetField("screenText", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field?.GetValue(ui) is TextMeshPro textFromField)
+                return textFromField;
+
+            PropertyInfo property = ui.GetType().GetProperty("screenText", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property?.GetValue(ui) is TextMeshPro textFromProperty)
+                return textFromProperty;
+
+            return ui.GetComponentInChildren<TextMeshPro>(true);
+        }
+
         public void Awake()
         {
             instance = this;
@@ -58,12 +114,14 @@ namespace iiMenu.Managers
                     GetObject("Environment Objects/LocalObjects_Prefab/TreeRoom/motdHeadingText").SetActive(false);
                 } else
                 {
-                    foreach (GorillaNetworkJoinTrigger joinTrigger in PhotonNetworkController.Instance.allJoinTriggers)
+                    foreach (GorillaNetworkJoinTrigger joinTrigger in GetJoinTriggers())
                     {
                         try
                         {
-                            JoinTriggerUI ui = joinTrigger.ui;
-                            JoinTriggerUITemplate temp = ui.template;
+                            JoinTriggerUI ui = GetJoinTriggerUI(joinTrigger);
+                            JoinTriggerUITemplate temp = GetJoinTriggerTemplate(ui);
+                            if (temp == null)
+                                continue;
 
                             if (_screenRed == null)
                             {
@@ -232,12 +290,14 @@ namespace iiMenu.Managers
                         }
                     }
 
-                    foreach (GorillaNetworkJoinTrigger joinTrigger in PhotonNetworkController.Instance.allJoinTriggers)
+                    foreach (GorillaNetworkJoinTrigger joinTrigger in GetJoinTriggers())
                     {
                         try
                         {
-                            JoinTriggerUI ui = joinTrigger.ui;
-                            JoinTriggerUITemplate temp = ui.template;
+                            JoinTriggerUI ui = GetJoinTriggerUI(joinTrigger);
+                            JoinTriggerUITemplate temp = GetJoinTriggerTemplate(ui);
+                            if (temp == null)
+                                continue;
 
                             temp.ScreenBG_AbandonPartyAndSoloJoin = BoardMaterial;
                             temp.ScreenBG_AlreadyInRoom = BoardMaterial;
@@ -248,7 +308,7 @@ namespace iiMenu.Managers
                             temp.ScreenBG_LeaveRoomAndSoloJoin = BoardMaterial;
                             temp.ScreenBG_NotConnectedSoloJoin = BoardMaterial;
 
-                            TextMeshPro text = ui.screenText;
+                            TextMeshPro text = GetJoinTriggerText(ui);
                             if (!textMeshPro.Contains(text))
                                 textMeshPro.Add(text);
                         }
@@ -351,7 +411,22 @@ namespace iiMenu.Managers
                 motdBodyText.SafeSetFont(activeFont);
                 FollowMenuSettings(motdBodyText, -4f);
 
-                motdBodyText.SafeSetText(FollowMenuSettings(string.Format(motdTemplate, PluginInfo.Version, fullModAmount, PluginInfo.BetaBuild ? "Beta" : "Release", PluginInfo.BuildTimestamp )));
+                string motdResolved;
+                try
+                {
+                    motdResolved = (motdTemplate ?? string.Empty).Contains("{")
+                        ? string.Format(motdTemplate, PluginInfo.Version, fullModAmount, PluginInfo.BetaBuild ? "Beta" : "Release", PluginInfo.BuildTimestamp)
+                        : (motdTemplate ?? string.Empty);
+                }
+                catch
+                {
+                    motdResolved = StaticMotdTemplate;
+                }
+
+                if (string.IsNullOrWhiteSpace(motdResolved))
+                    motdResolved = StaticMotdTemplate;
+
+                motdBodyText.SafeSetText(FollowMenuSettings(motdResolved));
             }
             catch { }
             

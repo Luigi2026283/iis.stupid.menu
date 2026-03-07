@@ -24,11 +24,43 @@ using GorillaTagScripts;
 using Photon.Pun;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace iiMenu.Utilities
 {
     public class GameModeUtilities
     {
+        private static bool TryChangeCurrentIt(object gameModeManager, NetPlayer player)
+        {
+            if (gameModeManager == null)
+                return false;
+
+            MethodInfo[] methods = gameModeManager.GetType()
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(m => m.Name == "ChangeCurrentIt")
+                .ToArray();
+
+            foreach (MethodInfo method in methods)
+            {
+                ParameterInfo[] parameters = method.GetParameters();
+                if (parameters.Length == 1 && parameters[0].ParameterType == typeof(NetPlayer))
+                {
+                    method.Invoke(gameModeManager, new object[] { player });
+                    return true;
+                }
+
+                if (parameters.Length == 2 &&
+                    parameters[0].ParameterType == typeof(NetPlayer) &&
+                    parameters[1].ParameterType == typeof(bool))
+                {
+                    method.Invoke(gameModeManager, new object[] { player, false });
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public static List<NetPlayer> InfectedList()
         {
             List<NetPlayer> infected = new List<NetPlayer>();
@@ -85,7 +117,10 @@ namespace iiMenu.Utilities
                 case GameModeType.PropHunt:
                     GorillaTagManager tagManager = (GorillaTagManager)GorillaGameManager.instance;
                     if (tagManager.isCurrentlyTag)
-                        tagManager.ChangeCurrentIt(plr);
+                    {
+                        if (!TryChangeCurrentIt(tagManager, plr))
+                            tagManager.currentIt = plr;
+                    }
                     else if (!tagManager.currentInfected.Contains(plr))
                         tagManager.AddInfectedPlayer(plr);
                     break;
@@ -93,7 +128,10 @@ namespace iiMenu.Utilities
                 case GameModeType.Ambush:
                     GorillaAmbushManager ghostManager = (GorillaAmbushManager)GorillaGameManager.instance;
                     if (ghostManager.isCurrentlyTag)
-                        ghostManager.ChangeCurrentIt(plr);
+                    {
+                        if (!TryChangeCurrentIt(ghostManager, plr))
+                            ghostManager.currentIt = plr;
+                    }
                     else if (!ghostManager.currentInfected.Contains(plr))
                         ghostManager.AddInfectedPlayer(plr);
                     break;
@@ -162,13 +200,15 @@ namespace iiMenu.Utilities
                 case GameModeType.FreezeTag:
                 case GameModeType.PropHunt:
                     GorillaTagManager tagManager = (GorillaTagManager)GorillaGameManager.instance;
-                    tagManager.ChangeCurrentIt(plr);
+                    if (!TryChangeCurrentIt(tagManager, plr))
+                        tagManager.currentIt = plr;
 
                     break;
                 case GameModeType.Ghost:
                 case GameModeType.Ambush:
                     GorillaAmbushManager ghostManager = (GorillaAmbushManager)GorillaGameManager.instance;
-                    ghostManager.ChangeCurrentIt(plr);
+                    if (!TryChangeCurrentIt(ghostManager, plr))
+                        ghostManager.currentIt = plr;
 
                     break;
                 case GameModeType.Paintbrawl:
@@ -193,14 +233,20 @@ namespace iiMenu.Utilities
                 case GameModeType.PropHunt:
                     GorillaTagManager tagManager = (GorillaTagManager)GorillaGameManager.instance;
                     if (tagManager.currentIt == plr)
-                        tagManager.ChangeCurrentIt(null);
+                    {
+                        if (!TryChangeCurrentIt(tagManager, null))
+                            tagManager.currentIt = null;
+                    }
 
                     break;
                 case GameModeType.Ghost:
                 case GameModeType.Ambush:
                     GorillaAmbushManager ghostManager = (GorillaAmbushManager)GorillaGameManager.instance;
                     if (ghostManager.currentIt == plr)
-                        ghostManager.ChangeCurrentIt(null);
+                    {
+                        if (!TryChangeCurrentIt(ghostManager, null))
+                            ghostManager.currentIt = null;
+                    }
 
                     break;
                 case GameModeType.Paintbrawl:

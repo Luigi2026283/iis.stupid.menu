@@ -222,6 +222,7 @@ namespace iiMenu.Menu
             "Advantage Mods",
             "Visual Mods",
             "Fun Mods",
+            "Friends",
             "Sound Mods",
             "Projectile Mods",
             "Master Mods",

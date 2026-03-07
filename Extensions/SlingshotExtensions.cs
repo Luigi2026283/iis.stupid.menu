@@ -20,16 +20,40 @@
  */
 
 using UnityEngine;
+using System.Reflection;
 
 namespace iiMenu.Extensions
 {
     public static class SlingshotExtensions
     {
+        private static readonly MethodInfo SpawnGrowingSnowballMethod =
+            typeof(GrowingSnowballThrowable).GetMethod(
+                "SpawnGrowingSnowball",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                null,
+                new[] { typeof(Vector3).MakeByRefType(), typeof(float) },
+                null
+            );
+
+        public static SlingshotProjectile SpawnGrowingSnowball(this GrowingSnowballThrowable snowball, ref Vector3 velocity, float scale)
+        {
+            if (snowball == null || SpawnGrowingSnowballMethod == null)
+                return null;
+
+            object[] args = { velocity, scale };
+            SlingshotProjectile projectile = SpawnGrowingSnowballMethod.Invoke(snowball, args) as SlingshotProjectile;
+
+            if (args[0] is Vector3 updatedVelocity)
+                velocity = updatedVelocity;
+
+            return projectile;
+        }
+
         public static Vector3 GetTrueLaunchPosition(this Slingshot slingshot) =>
             slingshot.drawingHand.transform.position + 
             (slingshot.centerOrigin.position - slingshot.drawingHand.transform.position).normalized * 
-            (EquipmentInteractor.instance.grabRadius - slingshot.dummyProjectileColliderRadius) * 
-            (slingshot.dummyProjectileInitialScale * Mathf.Abs(slingshot.transform.lossyScale.x));
+            EquipmentInteractor.instance.grabRadius * 
+            Mathf.Abs(slingshot.transform.lossyScale.x);
 
         public static Vector3 GetNetworkedLaunchVelocity(this Slingshot slingshot)
         {

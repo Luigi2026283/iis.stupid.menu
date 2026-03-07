@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ii's Stupid Menu  Extensions/VRRigExtensions.cs
  * A mod menu for Gorilla Tag with over 1000+ mods
  *
@@ -26,6 +26,7 @@ using Photon.Pun;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using static iiMenu.Menu.Main;
 using static iiMenu.Utilities.GameModeUtilities;
@@ -54,28 +55,14 @@ namespace iiMenu.Extensions
 
         public static string GetPlatform(this VRRig rig)
         {
-            int suspiciouslySteam = 0;
-            int suspiciouslyPC = 0;
-            int suspiciouslyQuest = 0;
-            string concatStringOfCosmeticsAllowed = rig.rawCosmeticString;
+            if (rig == null)
+                return "Standalone";
 
-            if (concatStringOfCosmeticsAllowed.Contains("S. FIRST LOGIN"))
-                suspiciouslySteam++;
+            var photonPlayer = rig.GetPhotonPlayer();
+            int customPropCount = photonPlayer?.CustomProperties?.Count ?? 0;
 
-            if (concatStringOfCosmeticsAllowed.Contains("FIRST LOGIN") || rig.GetPhotonPlayer().CustomProperties.Count >= 2)
-                suspiciouslyPC++;
-
-            if (rig.currentRankedSubTierPC > 0)
-                suspiciouslySteam++;
-            else if (rig.currentRankedSubTierQuest > 0)
-                suspiciouslyQuest++;
-
-
-            if (suspiciouslySteam > suspiciouslyPC && suspiciouslySteam > suspiciouslyQuest) return "Steam";
-            if (suspiciouslyPC > suspiciouslySteam && suspiciouslyPC > suspiciouslyQuest) return "PC";
-            if (suspiciouslyQuest > suspiciouslySteam && suspiciouslyQuest > suspiciouslyPC) return "Standalone";
-
-            return "Standalone";
+            // Fallback heuristic for newer game builds where old VRRig platform hints were removed.
+            return customPropCount >= 2 ? "PC" : "Standalone";
         }
 
         public static string GetCreationDate(this VRRig rig, Action<string> onTranslated = null, string format = "MMMM dd, yyyy h:mm tt") =>
@@ -85,9 +72,6 @@ namespace iiMenu.Extensions
         {
             if (Buttons.GetIndex("Follow Player Colors").enabled)
                 return rig.playerColor;
-
-            if (rig.bodyRenderer.cosmeticBodyType == GorillaBodyType.Skeleton)
-                return Color.green;
 
             switch (rig.setMatIndex)
             {
@@ -107,7 +91,7 @@ namespace iiMenu.Extensions
         }
 
         public static bool Active(this VRRig rig) =>
-            rig != null && GorillaParent.instance.vrrigs.Contains(rig);
+            rig != null && GorillaParent.instance.GetRigs().Contains(rig);
 
         public static float Distance(this VRRig rig, Vector3 position) =>
             Vector3.Distance(rig.transform.position, position);
@@ -119,7 +103,7 @@ namespace iiMenu.Extensions
             rig.Distance(GorillaTagger.Instance.bodyCollider.transform.position);
 
         public static VRRig GetClosest(this VRRig rig) =>
-            GorillaParent.instance.vrrigs.Where(targetRig => targetRig != null && targetRig != rig)
+            GorillaParent.instance.GetRigs().Where(targetRig => targetRig != null && targetRig != rig)
                                          .OrderBy(rig.Distance)
                                          .FirstOrDefault();
 
@@ -130,10 +114,42 @@ namespace iiMenu.Extensions
 
         public static int GetTruePing(this VRRig rig)
         {
-            double ping = Math.Abs((rig.velocityHistoryList[0].time - PhotonNetwork.Time) * 1000);
-            int safePing = (int)Math.Clamp(Math.Round(ping), 0, int.MaxValue);
+            if (rig == null)
+                return PhotonNetwork.GetPing();
 
-            return safePing;
+            var historyField = rig.GetType().GetField("velocityHistoryList", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (historyField?.GetValue(rig) is System.Collections.IList history && history.Count > 0)
+            {
+                object first = history[0];
+                if (first != null)
+                {
+                    var timeMember = first.GetType().GetField("time", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                        ?? (MemberInfo)first.GetType().GetProperty("time", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    double networkTime = PhotonNetwork.Time;
+                    double sampleTime = networkTime;
+
+                    switch (timeMember)
+                    {
+                        case FieldInfo field when field.GetValue(first) is double d:
+                            sampleTime = d;
+                            break;
+                        case FieldInfo field when field.GetValue(first) is float f:
+                            sampleTime = f;
+                            break;
+                        case PropertyInfo prop when prop.GetValue(first) is double pd:
+                            sampleTime = pd;
+                            break;
+                        case PropertyInfo prop when prop.GetValue(first) is float pf:
+                            sampleTime = pf;
+                            break;
+                    }
+
+                    double ping = Math.Abs((sampleTime - networkTime) * 1000d);
+                    return (int)Math.Clamp(Math.Round(ping), 0, int.MaxValue);
+                }
+            }
+
+            return GetPing(rig);
         }
 
         public static string GetName(this VRRig rig) =>
@@ -173,13 +189,13 @@ namespace iiMenu.Extensions
                         : tagManager.currentInfected.Contains(player)
                             ? (new[]
                             {
-                                tagManager.InterpolatedInfectedJumpSpeed(tagManager.currentInfected.Count),
-                                tagManager.InterpolatedInfectedJumpMultiplier(tagManager.currentInfected.Count)
+                                tagManager.fastJumpLimit,
+                                tagManager.fastJumpMultiplier
                             })
                             : (new[]
                         {
-                            tagManager.InterpolatedNoobJumpSpeed(tagManager.currentInfected.Count),
-                            tagManager.InterpolatedNoobJumpMultiplier(tagManager.currentInfected.Count)
+                            tagManager.slowJumpLimit,
+                            tagManager.slowJumpMultiplier
                         });
                 default:
                     return new[] { 6.5f, 1.1f };
@@ -193,3 +209,4 @@ namespace iiMenu.Extensions
             rig.GetSpeed()[1];
     }
 }
+

@@ -26,6 +26,7 @@ using System.Linq;
 using UnityEngine;
 using static iiMenu.Utilities.GameModeUtilities;
 
+using iiMenu.Utilities;
 namespace iiMenu.Patches.Menu
 {
     [HarmonyPatch(typeof(SIGadgetChargeBlaster), nameof(SIGadgetChargeBlaster.FireProjectile))]
@@ -38,7 +39,7 @@ namespace iiMenu.Patches.Menu
             if (enabled && __instance.blaster.LocalEquippedOrActivated)
             {
                 List<NetPlayer> infected = InfectedList();
-                List<VRRig> rigs = GorillaParent.instance.vrrigs
+                List<VRRig> rigs = GorillaParent.instance.GetRigs()
                     .Where(rig => !rig.isLocal)
                     .Where(rig => !infected.Contains(rig.GetPlayer()))
                     .ToList();
@@ -60,3 +61,5 @@ namespace iiMenu.Patches.Menu
         }
     }
 }
+
+

@@ -32,8 +32,31 @@ namespace iiMenu.Extensions
 {
     public static class MiscellaneousExtensions
     {
-        public static float GetDelay(this CallLimiter limiter) =>
-            limiter.timeCooldown / limiter.callHistoryLength;
+        public static float GetDelay(this CallLimiter limiter)
+        {
+            const float defaultDelay = 0.1f;
+            if (limiter == null)
+                return defaultDelay;
+
+            var limiterType = limiter.GetType();
+
+            float cooldown = 0f;
+            object cooldownObj = limiterType.GetProperty("timeCooldown", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(limiter)
+                ?? limiterType.GetField("timeCooldown", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(limiter);
+            if (cooldownObj is float cooldownFloat)
+                cooldown = cooldownFloat;
+
+            int historyLength = 0;
+            object historyObj = limiterType.GetProperty("callHistoryLength", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(limiter)
+                ?? limiterType.GetField("callHistoryLength", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(limiter);
+            if (historyObj is int historyInt)
+                historyLength = historyInt;
+
+            if (historyLength <= 0)
+                return defaultDelay;
+
+            return cooldown / historyLength;
+        }
 
         public static float GetDelay(this FXSystemSettings settings, int index) =>
             settings.GetCallLimiter(index).GetDelay();
@@ -158,8 +181,32 @@ namespace iiMenu.Extensions
                 });
 		}
 
-        public static int CreateTypeNetId(this GameEntityManager manager, int typeId) =>
-            manager.CreateNetId(1 + manager.FactoryGetBuiltInEntityCountById(typeId));
+        public static int CreateTypeNetId(this GameEntityManager manager, int typeId)
+        {
+            if (manager == null)
+                return 0;
+
+            var managerType = manager.GetType();
+
+            // Newer builds expose CreateTypeNetId directly.
+            MethodInfo createTypeNetId = managerType.GetMethod("CreateTypeNetId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(int) }, null);
+            if (createTypeNetId != null)
+                return (int)createTypeNetId.Invoke(manager, new object[] { typeId });
+
+            // Older builds used CreateNetId with an offset of builtin entity count.
+            MethodInfo createNetId = managerType.GetMethod("CreateNetId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(int) }, null);
+            if (createNetId != null)
+            {
+                int offset = 1;
+                MethodInfo factoryCount = managerType.GetMethod("FactoryGetBuiltInEntityCountById", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(int) }, null);
+                if (factoryCount != null)
+                    offset += (int)factoryCount.Invoke(manager, new object[] { typeId });
+
+                return (int)createNetId.Invoke(manager, new object[] { offset });
+            }
+
+            return manager.GetInvalidNetId();
+        }
 
         public static int GetInvalidNetId(this GameEntityManager manager) =>
             manager.GetNetIdFromEntityId(GameEntityId.Invalid);

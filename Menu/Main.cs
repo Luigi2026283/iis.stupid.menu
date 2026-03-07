@@ -43,6 +43,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -83,11 +84,38 @@ using Random = UnityEngine.Random;
 
 namespace iiMenu.Menu
 {
-    [HarmonyPatch(typeof(GTPlayer), nameof(GTPlayer.LateUpdate))]
+    [HarmonyPatch(typeof(GTPlayer))]
     public class Main : MonoBehaviour // Do not get rid of this. I don't know why, the entire class kills itself.
     {
+        private static EventInfo _masterClientSwitchEvent;
+        private static Delegate _masterClientSwitchDelegate;
+
+        private static MethodBase TargetMethod()
+        {
+            Type gtPlayerType = typeof(GTPlayer);
+            string[] targetNames =
+            {
+                "LateUpdate",
+                "LateUpdateLocal",
+                "LateUpdateShared",
+                "LateUpdateRoutine",
+                "Update"
+            };
+
+            foreach (string targetName in targetNames)
+            {
+                MethodInfo method = AccessTools.Method(gtPlayerType, targetName);
+                if (method != null)
+                    return method;
+            }
+
+            return gtPlayerType
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .FirstOrDefault(method => method.Name.Contains("LateUpdate") && method.GetParameters().Length == 0);
+        }
+
         /// <summary>
-        /// Runs on first frame of <see cref="GTPlayer.LateUpdate"/> after menu is launched
+        /// Runs on first frame of the player update patch after menu is launched
         /// </summary>
         public static void OnLaunch()
         {
@@ -110,7 +138,7 @@ namespace iiMenu.Menu
 
             NetworkSystem.Instance.OnJoinedRoomEvent += OnJoinRoom;
             NetworkSystem.Instance.OnReturnedToSinglePlayer += OnLeaveRoom;
-            NetworkSystem.Instance.OnMasterClientSwitchedEvent += OnMasterClientSwitch;
+            SubscribeMasterClientSwitchEvent();
 
             NetworkSystem.Instance.OnPlayerJoined += OnPlayerJoin;
             NetworkSystem.Instance.OnPlayerLeft += OnPlayerLeave;
@@ -1105,7 +1133,9 @@ namespace iiMenu.Menu
                         GhostRig.transform.Find("VR Constraints/LeftArm/Left Arm IK/SlideAudio").gameObject.SetActive(false);
                         GhostRig.transform.Find("VR Constraints/RightArm/Right Arm IK/SlideAudio").gameObject.SetActive(false);
                         GhostRig.transform.Find("rig/body_pivot/SlideAudio").gameObject.SetActive(false);
-                        GhostRig.GetComponent<OwnershipGaurd>().enabled = false;
+                        Behaviour ownershipGuard = GhostRig.GetComponent("OwnershipGaurd") as Behaviour;
+                        if (ownershipGuard != null)
+                            ownershipGuard.enabled = false;
 
                         Visuals.FixRigMaterialESPColors(GhostRig);
 
@@ -1189,9 +1219,9 @@ namespace iiMenu.Menu
                 if (Settings.TutorialObject != null)
                     Settings.UpdateTutorial();
 
-                ServerPos = ServerPos == Vector3.zero ? ServerSyncPos : Vector3.Lerp(ServerPos, VRRig.LocalRig.SanitizeVector3(ServerSyncPos), VRRig.LocalRig.lerpValueBody * 0.66f);
-                ServerLeftHandPos = ServerLeftHandPos == Vector3.zero ? ServerSyncLeftHandPos : Vector3.Lerp(ServerLeftHandPos, VRRig.LocalRig.SanitizeVector3(ServerSyncLeftHandPos), VRRig.LocalRig.lerpValueBody);
-                ServerRightHandPos = ServerRightHandPos == Vector3.zero ? ServerSyncRightHandPos : Vector3.Lerp(ServerRightHandPos, VRRig.LocalRig.SanitizeVector3(ServerSyncRightHandPos), VRRig.LocalRig.lerpValueBody);
+                ServerPos = ServerPos == Vector3.zero ? ServerSyncPos : Vector3.Lerp(ServerPos, SanitizeVector(ServerSyncPos, ServerPos), VRRig.LocalRig.lerpValueBody * 0.66f);
+                ServerLeftHandPos = ServerLeftHandPos == Vector3.zero ? ServerSyncLeftHandPos : Vector3.Lerp(ServerLeftHandPos, SanitizeVector(ServerSyncLeftHandPos, ServerLeftHandPos), VRRig.LocalRig.lerpValueBody);
+                ServerRightHandPos = ServerRightHandPos == Vector3.zero ? ServerSyncRightHandPos : Vector3.Lerp(ServerRightHandPos, SanitizeVector(ServerSyncRightHandPos, ServerRightHandPos), VRRig.LocalRig.lerpValueBody);
                 #endregion
 
                 #region Mod Bindings
@@ -3211,7 +3241,7 @@ namespace iiMenu.Menu
                     isOnPC = true;
 
                     if (!XRSettings.isDeviceActive)
-                        PrivateUIRoom.instance.ToggleLevelVisibility(true);
+                        TogglePrivateUIRoomVisibility(true);
 
                     if (joystickMenu)
                         Toggle("Joystick Menu");
@@ -4611,11 +4641,84 @@ namespace iiMenu.Menu
         }
 
         private static VRRig _giveGunTarget;
+        private static Func<GorillaParent, IEnumerable<VRRig>> _rigCollectionResolver;
+        private static bool _rigCollectionResolverInitialized;
+
+        private static IReadOnlyCollection<VRRig> GetActiveRigs()
+        {
+            GorillaParent parent = GorillaParent.instance;
+            if (parent == null)
+                return Array.Empty<VRRig>();
+
+            if (!_rigCollectionResolverInitialized)
+            {
+                _rigCollectionResolver = ResolveRigCollectionResolver(parent.GetType());
+                _rigCollectionResolverInitialized = true;
+            }
+
+            if (_rigCollectionResolver == null)
+                return Array.Empty<VRRig>();
+
+            try
+            {
+                IEnumerable<VRRig> rigs = _rigCollectionResolver(parent);
+                if (rigs == null)
+                    return Array.Empty<VRRig>();
+
+                if (rigs is IReadOnlyCollection<VRRig> readOnlyCollection)
+                    return readOnlyCollection;
+
+                return rigs.ToList();
+            }
+            catch
+            {
+                return Array.Empty<VRRig>();
+            }
+        }
+
+        private static Func<GorillaParent, IEnumerable<VRRig>> ResolveRigCollectionResolver(Type parentType)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            string[] candidateNames =
+            {
+                "vrrigs",
+                "VRRigs",
+                "_vrrigs",
+                "rigs",
+                "_rigs",
+                "allRigs",
+                "AllRigs"
+            };
+
+            foreach (string candidate in candidateNames)
+            {
+                FieldInfo field = parentType.GetField(candidate, flags);
+                if (field != null && typeof(IEnumerable<VRRig>).IsAssignableFrom(field.FieldType))
+                    return parent => field.GetValue(parent) as IEnumerable<VRRig>;
+
+                PropertyInfo property = parentType.GetProperty(candidate, flags);
+                if (property != null && property.CanRead && typeof(IEnumerable<VRRig>).IsAssignableFrom(property.PropertyType))
+                    return parent => property.GetValue(parent, null) as IEnumerable<VRRig>;
+            }
+
+            FieldInfo fallbackField = parentType.GetFields(flags).FirstOrDefault(field => typeof(IEnumerable<VRRig>).IsAssignableFrom(field.FieldType));
+            if (fallbackField != null)
+                return parent => fallbackField.GetValue(parent) as IEnumerable<VRRig>;
+
+            PropertyInfo fallbackProperty = parentType.GetProperties(flags).FirstOrDefault(property => property.CanRead && typeof(IEnumerable<VRRig>).IsAssignableFrom(property.PropertyType));
+            if (fallbackProperty != null)
+                return parent => fallbackProperty.GetValue(parent, null) as IEnumerable<VRRig>;
+
+            LogManager.LogError("Failed to resolve VRRig collection on GorillaParent. Gun target checks are disabled.");
+            return null;
+        }
+
         public static VRRig GiveGunTarget
         {
             get
             {
-                if (!GorillaParent.instance.vrrigs.Contains(_giveGunTarget))
+                IReadOnlyCollection<VRRig> rigs = GetActiveRigs();
+                if (_giveGunTarget != null && !rigs.Contains(_giveGunTarget))
                     _giveGunTarget = null;
 
                 return _giveGunTarget;
@@ -5037,27 +5140,17 @@ namespace iiMenu.Menu
         {
             if (snowballDict == null)
             {
-                if (!CosmeticsV2Spawner_Dirty.completed)
-                    return null;
-
                 if (!GorillaComputer.instance.isConnectedToMaster)
                     return null;
 
-                if (!allSnowballsInitialized &&
-                    (CosmeticsV2Spawner_Dirty.materialIndexToSnowballThrowablePlayfabIdStringLeft.Count >= 1 &&
-                     CosmeticsV2Spawner_Dirty.materialIndexToSnowballThrowablePlayfabIdStringRight.Count >= 1))
-                {
-                    allSnowballsInitialized = true;
-
-                    CosmeticsV2Spawner_Dirty.materialIndexToSnowballThrowablePlayfabIdStringLeft.ForEach(v => VRRig.LocalRig.cosmeticsObjectRegistry.Cosmetic(v.Value));
-                    CosmeticsV2Spawner_Dirty.materialIndexToSnowballThrowablePlayfabIdStringRight.ForEach(v => VRRig.LocalRig.cosmeticsObjectRegistry.Cosmetic(v.Value));
-
-                    return null;
-                }
+                TryInitializeSnowballCosmetics();
 
                 snowballDict = new Dictionary<string, SnowballThrowable>();
                 foreach (SnowballMaker Maker in new[] { SnowballMaker.leftHandInstance, SnowballMaker.rightHandInstance })
                 {
+                    if (Maker == null || Maker.snowballs == null)
+                        continue;
+
                     foreach (SnowballThrowable Throwable in Maker.snowballs)
                     {
                         try
@@ -5081,6 +5174,120 @@ namespace iiMenu.Menu
             }
 
             return projectile;
+        }
+
+        private static void TryInitializeSnowballCosmetics()
+        {
+            if (allSnowballsInitialized)
+                return;
+
+            allSnowballsInitialized = true;
+
+            try
+            {
+                if (!ReadStaticBool(typeof(CosmeticsV2Spawner_Dirty), "completed", true))
+                    return;
+
+                object registry = VRRig.LocalRig?.cosmeticsObjectRegistry;
+                if (registry == null)
+                    return;
+
+                InitializeSnowballCosmeticsFromCollection(typeof(CosmeticsV2Spawner_Dirty), registry, "materialIndexToSnowballThrowablePlayfabIdStringLeft");
+                InitializeSnowballCosmeticsFromCollection(typeof(CosmeticsV2Spawner_Dirty), registry, "materialIndexToSnowballThrowablePlayfabIdStringRight");
+            }
+            catch (Exception exc)
+            {
+                LogManager.LogError($"Failed to initialize snowball cosmetics: {exc.Message}");
+            }
+        }
+
+        private static void InitializeSnowballCosmeticsFromCollection(Type spawnerType, object registry, string memberName)
+        {
+            const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+
+            object entriesObject =
+                spawnerType.GetField(memberName, flags)?.GetValue(null) ??
+                spawnerType.GetProperty(memberName, flags)?.GetValue(null, null);
+
+            if (!(entriesObject is IEnumerable entries))
+                return;
+
+            foreach (object entry in entries)
+            {
+                object value =
+                    entry?.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(entry, null) ??
+                    entry?.GetType().GetField("Value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(entry);
+
+                if (value != null)
+                    TryInvokeCosmetic(registry, value);
+            }
+        }
+
+        private static bool ReadStaticBool(Type sourceType, string memberName, bool fallback)
+        {
+            const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+            object value =
+                sourceType.GetField(memberName, flags)?.GetValue(null) ??
+                sourceType.GetProperty(memberName, flags)?.GetValue(null, null);
+
+            return value is bool state ? state : fallback;
+        }
+
+        private static void TryInvokeCosmetic(object registry, object rawValue)
+        {
+            if (registry == null || rawValue == null)
+                return;
+
+            MethodInfo method = registry.GetType()
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .FirstOrDefault(m => m.Name == "Cosmetic" && m.GetParameters().Length == 1);
+
+            if (method == null)
+                return;
+
+            ParameterInfo parameter = method.GetParameters()[0];
+            object convertedValue = ConvertCosmeticValue(rawValue, parameter.ParameterType);
+            if (convertedValue == null && parameter.ParameterType.IsValueType)
+                return;
+
+            method.Invoke(registry, new[] { convertedValue });
+        }
+
+        private static object ConvertCosmeticValue(object rawValue, Type destinationType)
+        {
+            if (destinationType.IsInstanceOfType(rawValue))
+                return rawValue;
+
+            string valueText = rawValue.ToString();
+            if (destinationType == typeof(string))
+                return valueText;
+
+            if (destinationType == typeof(int))
+                return int.TryParse(valueText, out int parsedInt) ? parsedInt : (object)null;
+
+            if (destinationType == typeof(uint))
+                return uint.TryParse(valueText, out uint parsedUInt) ? parsedUInt : (object)null;
+
+            if (destinationType.IsEnum)
+            {
+                try
+                {
+                    return Enum.Parse(destinationType, valueText, true);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            try
+            {
+                return Convert.ChangeType(rawValue, destinationType, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public static readonly Dictionary<Type, object[]> typePool = new Dictionary<Type, object[]>();
@@ -5611,6 +5818,81 @@ namespace iiMenu.Menu
                 Buttons.GetIndex("MasterLabel").overlapText = "You are not master client.";
         }
 
+        private static void SubscribeMasterClientSwitchEvent()
+        {
+            if (_masterClientSwitchEvent != null || NetworkSystem.Instance == null)
+                return;
+
+            string[] candidateEvents =
+            {
+                "OnMasterClientSwitchedEvent",
+                "OnMasterClientSwitched",
+                "OnMasterClientChanged",
+                "OnMasterClientChange"
+            };
+
+            Type networkSystemType = NetworkSystem.Instance.GetType();
+            foreach (string candidateEvent in candidateEvents)
+            {
+                EventInfo eventInfo = networkSystemType.GetEvent(candidateEvent, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (eventInfo == null)
+                    continue;
+
+                Delegate handler = null;
+                if (eventInfo.EventHandlerType == typeof(Action<NetPlayer>))
+                    handler = (Action<NetPlayer>)OnMasterClientSwitch;
+                else if (eventInfo.EventHandlerType == typeof(Action))
+                    handler = (Action)(() => OnMasterClientSwitch(NetworkSystem.Instance.MasterClient));
+
+                if (handler == null)
+                    continue;
+
+                eventInfo.AddEventHandler(NetworkSystem.Instance, handler);
+                _masterClientSwitchEvent = eventInfo;
+                _masterClientSwitchDelegate = handler;
+                return;
+            }
+        }
+
+        private static void UnsubscribeMasterClientSwitchEvent()
+        {
+            if (_masterClientSwitchEvent == null || _masterClientSwitchDelegate == null || NetworkSystem.Instance == null)
+                return;
+
+            _masterClientSwitchEvent.RemoveEventHandler(NetworkSystem.Instance, _masterClientSwitchDelegate);
+            _masterClientSwitchEvent = null;
+            _masterClientSwitchDelegate = null;
+        }
+
+        private static Vector3 SanitizeVector(Vector3 value, Vector3 fallback)
+        {
+            if (float.IsNaN(value.x) || float.IsNaN(value.y) || float.IsNaN(value.z))
+                return fallback;
+
+            if (float.IsInfinity(value.x) || float.IsInfinity(value.y) || float.IsInfinity(value.z))
+                return fallback;
+
+            return value;
+        }
+
+        private static void TogglePrivateUIRoomVisibility(bool visible)
+        {
+            Type roomType = typeof(PrivateUIRoom);
+            const BindingFlags flags = BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+            object room =
+                roomType.GetProperty("instance", flags)?.GetValue(null, null) ??
+                roomType.GetProperty("Instance", flags)?.GetValue(null, null) ??
+                roomType.GetField("instance", flags)?.GetValue(null) ??
+                roomType.GetField("Instance", flags)?.GetValue(null);
+
+            if (room == null)
+                return;
+
+            MethodInfo toggleVisibility = room.GetType().GetMethod("ToggleLevelVisibility", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(bool) }, null);
+            toggleVisibility?.Invoke(room, new object[] { visible });
+        }
+
         private static void OnPlayerJoin(NetPlayer Player)
         {
             if (Player != NetworkSystem.Instance.LocalPlayer && !disablePlayerNotifications)
@@ -5656,31 +5938,17 @@ namespace iiMenu.Menu
                 return;
 
             viewFilter ??= Array.Empty<PhotonView>();
+            HashSet<int> filteredViewIDs = new HashSet<int>(viewFilter.Where(view => view != null).Select(view => view.ViewID));
 
-            NonAllocDictionary<int, PhotonView> photonViewList = PhotonNetwork.photonViewList;
-            List<PhotonView> viewsToSerialize = new List<PhotonView>();
-
-            List<int> filteredViewIDs = viewFilter.Select(view => view.ViewID).ToList();
-
-            foreach (PhotonView photonView in photonViewList.Values)
+            foreach (PhotonView view in Object.FindObjectsByType<PhotonView>(FindObjectsSortMode.None))
             {
-                if (!photonView.IsMine || photonView.Synchronization == ViewSynchronization.Off || !photonView.isActiveAndEnabled || PhotonNetwork.blockedSendingGroups.Contains(photonView.Group))
+                if (view == null || !view.IsMine || view.Synchronization == ViewSynchronization.Off || !view.isActiveAndEnabled)
                     continue;
 
-                if (exclude)
-                {
-                    if (!filteredViewIDs.Contains(photonView.ViewID))
-                        viewsToSerialize.Add(photonView);
-                }
-                else
-                {
-                    if (filteredViewIDs.Contains(photonView.ViewID))
-                        viewsToSerialize.Add(photonView);
-                }
+                bool isFiltered = filteredViewIDs.Contains(view.ViewID);
+                if ((exclude && !isFiltered) || (!exclude && isFiltered))
+                    SendSerialize(view, null, timeOffset, delay);
             }
-
-            foreach (PhotonView view in viewsToSerialize)
-                SendSerialize(view, null, timeOffset, delay);
         }
 
         /// <summary>
@@ -5702,52 +5970,23 @@ namespace iiMenu.Menu
                 return;
             }
 
-            List<object> serializedData = PhotonNetwork.OnSerializeWrite(pv);
-
-            PhotonNetwork.RaiseEventBatch raiseEventBatch = new PhotonNetwork.RaiseEventBatch();
-
-            bool mixedReliable = pv.mixedModeIsReliable;
-            raiseEventBatch.Reliable = pv.Synchronization == ViewSynchronization.ReliableDeltaCompressed || mixedReliable;
-            raiseEventBatch.Group = pv.Group;
-
-            IDictionary dictionary = PhotonNetwork.serializeViewBatches;
-
-            PhotonNetwork.SerializeViewBatch serializeViewBatch = new PhotonNetwork.SerializeViewBatch(raiseEventBatch, 2);
-
-            if (!dictionary.Contains(raiseEventBatch))
-                dictionary[raiseEventBatch] = serializeViewBatch;
-
-            serializeViewBatch.Add(serializedData);
-
-            RaiseEventOptions sendOptions = PhotonNetwork.serializeRaiseEvOptions;
-            RaiseEventOptions finalOptions = options != null ? new RaiseEventOptions
+            Action flush = () =>
             {
-                CachingOption = sendOptions.CachingOption,
-                Flags = sendOptions.Flags,
-                InterestGroup = sendOptions.InterestGroup,
-                TargetActors = options.TargetActors,
-                Receivers = options.Receivers
-            } : sendOptions;
-
-            bool reliable = serializeViewBatch.Batch.Reliable;
-            List<object> objectUpdate = serializeViewBatch.ObjectUpdates;
-            byte currentLevelPrefix = PhotonNetwork.currentLevelPrefix;
-
-            objectUpdate[0] = PhotonNetwork.ServerTimestamp + timeOffset;
-            objectUpdate[1] = currentLevelPrefix != 0 ? (object)currentLevelPrefix : null;
+                try
+                {
+                    PhotonNetwork.SendAllOutgoingCommands();
+                    PhotonNetwork.NetworkingClient?.LoadBalancingPeer?.SendOutgoingCommands();
+                }
+                catch (Exception exc)
+                {
+                    LogManager.LogError($"SendSerialize fallback failed: {exc.Message}");
+                }
+            };
 
             if (delay <= 0f)
-                PhotonNetwork.NetworkingClient.OpRaiseEvent((byte)(reliable ? 206 : 201), objectUpdate, finalOptions,
-                    reliable ? SendOptions.SendReliable : SendOptions.SendUnreliable);
+                flush();
             else
-            {
-                objectUpdate = new List<object>(objectUpdate);
-                CoroutineManager.instance.StartCoroutine(SerializationDelay(() =>
-                    PhotonNetwork.NetworkingClient.OpRaiseEvent((byte)(reliable ? 206 : 201), objectUpdate, finalOptions,
-                        reliable ? SendOptions.SendReliable : SendOptions.SendUnreliable), delay));
-            }
-
-            serializeViewBatch.Clear();
+                CoroutineManager.instance.StartCoroutine(SerializationDelay(flush, delay));
         }
 
         public static IEnumerator SerializationDelay(Action action, float delay)
@@ -5845,7 +6084,7 @@ namespace iiMenu.Menu
             {
                 if (!GorillaComputer.instance.friendJoinCollider.playerIDsCurrentlyTouching.Contains(PhotonNetwork
                         .LocalPlayer.UserId) &&
-                    !CosmeticWardrobeProximityDetector.IsUserNearWardrobe(PhotonNetwork.LocalPlayer.UserId)) return;
+                    !CosmeticWardrobeProximityDetector.IsUserNearWardrobe(PhotonNetwork.LocalPlayer.ActorNumber)) return;
                 GorillaTagger.Instance.myVRRig.SendRPC("RPC_InitializeNoobMaterial", RpcTarget.All, VRRig.LocalRig.playerColor.r, VRRig.LocalRig.playerColor.g, VRRig.LocalRig.playerColor.b);
                 RPCProtection();
             }
@@ -6414,6 +6653,7 @@ namespace iiMenu.Menu
 
             NetworkSystem.Instance.OnJoinedRoomEvent -= OnJoinRoom;
             NetworkSystem.Instance.OnReturnedToSinglePlayer -= OnLeaveRoom;
+            UnsubscribeMasterClientSwitchEvent();
 
             NetworkSystem.Instance.OnPlayerJoined -= OnPlayerJoin;
             NetworkSystem.Instance.OnPlayerLeft -= OnPlayerLeave;

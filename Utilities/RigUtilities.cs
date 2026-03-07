@@ -27,18 +27,54 @@ using PlayFab.ClientModels;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
 namespace iiMenu.Utilities
 {
-    public class RigUtilities
+    public static class RigUtilities
     {
+        private static readonly BindingFlags AnyMember = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+
         public static VRRig GetVRRigFromPlayer(NetPlayer p) =>
             GorillaGameManager.StaticFindRigForPlayer(p);
 
         public static NetPlayer GetPlayerFromVRRig(VRRig p) =>
-            p.Creator ?? NetworkSystem.Instance.GetPlayer(NetworkSystem.Instance.GetOwningPlayerID(p.rigSerializer.gameObject));
+            p == null ? null : p.Creator ?? ResolveOwnerFromRig(p);
+
+        private static NetPlayer ResolveOwnerFromRig(VRRig rig)
+        {
+            try
+            {
+                GameObject ownerObject = ResolveRigSerializerGameObject(rig) ?? rig.gameObject;
+                int ownerId = NetworkSystem.Instance.GetOwningPlayerID(ownerObject);
+                return NetworkSystem.Instance.GetPlayer(ownerId);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static GameObject ResolveRigSerializerGameObject(VRRig rig)
+        {
+            if (rig == null)
+                return null;
+
+            try
+            {
+                object serializer = rig.GetType().GetField("rigSerializer", AnyMember)?.GetValue(rig) ??
+                                    rig.GetType().GetProperty("rigSerializer", AnyMember)?.GetValue(rig, null);
+                if (serializer is Component component)
+                    return component.gameObject;
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
 
         public static NetPlayer GetPlayerFromID(string id) =>
             PhotonNetwork.PlayerList.FirstOrDefault(player => player.UserId == id);
@@ -66,10 +102,70 @@ namespace iiMenu.Utilities
             GetVRRigFromPlayer(GetRandomPlayer(includeSelf));
 
         public static NetworkView GetNetworkViewFromVRRig(VRRig p) =>
-            p.netView;
+            ResolveNetworkView(p);
+
+        private static NetworkView ResolveNetworkView(VRRig rig)
+        {
+            if (rig == null)
+                return null;
+
+            try
+            {
+                object netView = rig.GetType().GetField("netView", AnyMember)?.GetValue(rig) ??
+                                 rig.GetType().GetProperty("netView", AnyMember)?.GetValue(rig, null);
+                if (netView is NetworkView view)
+                    return view;
+            }
+            catch
+            {
+            }
+
+            return rig.GetComponent<NetworkView>();
+        }
 
         public static PhotonView GetPhotonViewFromVRRig(VRRig p) =>
-            GetNetworkViewFromVRRig(p).GetView;
+            GetNetworkViewFromVRRig(p)?.GetView ?? p?.GetComponent<PhotonView>();
+
+        public static List<VRRig> GetRigs(this GorillaParent parent)
+        {
+            if (parent == null)
+                return new List<VRRig>();
+
+            if (TryReadRigList(parent, "vrrigs", out List<VRRig> rigs))
+                return rigs;
+            if (TryReadRigList(parent, "allVRRigs", out rigs))
+                return rigs;
+            if (TryReadRigList(parent, "allVrrigs", out rigs))
+                return rigs;
+
+            return UnityEngine.Object.FindObjectsByType<VRRig>(FindObjectsSortMode.None).ToList();
+        }
+
+        private static bool TryReadRigList(GorillaParent parent, string memberName, out List<VRRig> rigs)
+        {
+            rigs = null;
+            try
+            {
+                object value = parent.GetType().GetField(memberName, AnyMember)?.GetValue(parent) ??
+                               parent.GetType().GetProperty(memberName, AnyMember)?.GetValue(parent, null);
+                if (value is List<VRRig> list)
+                {
+                    rigs = list;
+                    return true;
+                }
+
+                if (value is VRRig[] array)
+                {
+                    rigs = array.ToList();
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
 
         public static VRRig GetClosestVRRig() =>
             VRRig.LocalRig.GetClosest();

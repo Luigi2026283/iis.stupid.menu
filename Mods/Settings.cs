@@ -525,13 +525,13 @@ namespace iiMenu.Mods
                         new ButtonInfo {
                             buttonText = "Vibrate Player",
                             overlapText = $"Vibrate {targetName}",
-                            method =() => Overpowered.BetaSetStatus(RoomSystem.StatusEffects.JoinedTaggedTime, new RaiseEventOptions { TargetActors = new[] { player.ActorNumber } }),
+                            method =() => Overpowered.BetaSetStatus(1, new RaiseEventOptions { TargetActors = new[] { player.ActorNumber } }),
                             toolTip = $"Vibrates {targetName}'s controllers."
                         },
                         new ButtonInfo {
                             buttonText = "Slow Player",
                             overlapText = $"Slow {targetName}",
-                            method =() => Overpowered.BetaSetStatus(RoomSystem.StatusEffects.TaggedTime, new RaiseEventOptions { TargetActors = new[] { player.ActorNumber } } ),
+                            method =() => Overpowered.BetaSetStatus(0, new RaiseEventOptions { TargetActors = new[] { player.ActorNumber } } ),
                             toolTip = $"Gives {targetName} tag freeze."
                         }
                     }
@@ -621,7 +621,7 @@ namespace iiMenu.Mods
                         new ButtonInfo
                         {
                             buttonText = "Player FPS",
-                            overlapText = $"FPS: {playerRig.fps}",
+                            overlapText = $"FPS: {playerRig.GetPing()}",
                             label = true
                         }
                     }

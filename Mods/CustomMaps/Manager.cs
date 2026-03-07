@@ -40,6 +40,9 @@ namespace iiMenu.Mods.CustomMaps
 
         public static long? currentMapId;
 
+        private static long GetActiveMapModId() =>
+            currentMapId ?? CustomMapLoader.LoadedMapModId;
+
         public static void UpdateCustomMapsTab(long? overwriteId = null)
         {
             currentMapId = overwriteId;
@@ -97,7 +100,7 @@ namespace iiMenu.Mods.CustomMaps
         {
             string DirectoryTarget = FileUtilities.GetGamePath() + $"/{PluginInfo.BaseDirectory}/CustomScripts/{CustomMapLoader.LoadedMapModId}.luau";
             if (!File.Exists(DirectoryTarget))
-                File.WriteAllText(DirectoryTarget, mapScriptArchives[CustomMapManager.currentRoomMapModId]);
+                File.WriteAllText(DirectoryTarget, mapScriptArchives[GetActiveMapModId()]);
             Process.Start(DirectoryTarget);
         }
 
@@ -122,7 +125,7 @@ namespace iiMenu.Mods.CustomMaps
 
         public static void StopUserScript()
         {
-            CustomGameMode.LuaScript = mapScriptArchives[CustomMapManager.currentRoomMapModId];
+            CustomGameMode.LuaScript = mapScriptArchives[GetActiveMapModId()];
 
             if (NetworkSystem.Instance.InRoom)
                 LuauHud.Instance.RestartLuauScript();
@@ -132,7 +135,7 @@ namespace iiMenu.Mods.CustomMaps
 
         public static void RevertCustomScript(int[] lines)
         {
-            Dictionary<int, string> replacements = lines.ToDictionary(line => line, line => mapScriptArchives[CustomMapManager.currentRoomMapModId].Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)[line]);
+            Dictionary<int, string> replacements = lines.ToDictionary(line => line, line => mapScriptArchives[GetActiveMapModId()].Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)[line]);
             ModifyCustomScript(replacements);
         }
 

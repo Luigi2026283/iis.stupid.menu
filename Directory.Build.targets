@@ -51,7 +51,7 @@
 	  <FilesToCopy Include="$(TargetDir)$(TargetName).dll" Condition="Exists('$(TargetDir)$(TargetName).dll')"/>
     </ItemGroup>
 
-    <Copy SourceFiles="@(FilesToCopy)" DestinationFiles="@(FilesToCopy->'$(PluginsPath)\%(Filename)%(Extension)')"/>
+    <Copy SourceFiles="@(FilesToCopy)" DestinationFiles="@(FilesToCopy->'$(PluginsPath)\%(Filename)%(Extension)')" ContinueOnError="WarnAndContinue"/>
     <Message Text="Copied $(TargetFileName) and $(TargetName).pdb to Plugins" Importance="high"/>
   </Target>
 </Project>

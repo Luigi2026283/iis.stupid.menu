@@ -31,6 +31,7 @@ using static iiMenu.Extensions.VRRigExtensions;
 using static iiMenu.Menu.Main;
 using static iiMenu.Utilities.RigUtilities;
 
+using iiMenu.Utilities;
 namespace iiMenu.Mods.CustomMaps.Maps
 {
     public class MonkeMagic : CustomMap
@@ -247,7 +248,7 @@ namespace iiMenu.Mods.CustomMaps.Maps
             if (!PhotonNetwork.InRoom) return;
             List<VRRig> nearbyPlayers = new List<VRRig>();
 
-            foreach (VRRig vrrig in GorillaParent.instance.vrrigs)
+            foreach (VRRig vrrig in GorillaParent.instance.GetRigs())
             {
                 if (Vector3.Distance(vrrig.transform.position, VRRig.LocalRig.transform.position) < 4 && !vrrig.IsLocal())
                     nearbyPlayers.Add(vrrig);
@@ -268,7 +269,7 @@ namespace iiMenu.Mods.CustomMaps.Maps
         {
             if (Time.time < crashDelay)
                 return;
-            foreach (var Player in from rig in GorillaParent.instance.vrrigs where !rig.isLocal && (Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, rig.headMesh.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, rig.headMesh.transform.position) < 0.25f) select GetPlayerFromVRRig(rig))
+            foreach (var Player in from rig in GorillaParent.instance.GetRigs() where !rig.isLocal && (Vector3.Distance(GorillaTagger.Instance.leftHandTransform.position, rig.headMesh.transform.position) < 0.25f || Vector3.Distance(GorillaTagger.Instance.rightHandTransform.position, rig.headMesh.transform.position) < 0.25f) select GetPlayerFromVRRig(rig))
             {
                 CrashPlayer(Player.ActorNumber);
                 crashDelay = Time.time + 0.2f;
@@ -278,7 +279,7 @@ namespace iiMenu.Mods.CustomMaps.Maps
         {
             if (Time.time < crashDelay)
                 return;
-            foreach (var Player in from vrrig in GorillaParent.instance.vrrigs where !vrrig.isMyPlayer && !vrrig.isOfflineVRRig && (Vector3.Distance(vrrig.rightHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5 || Vector3.Distance(vrrig.leftHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5 || Vector3.Distance(vrrig.transform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5) select GetPlayerFromVRRig(vrrig))
+            foreach (var Player in from vrrig in GorillaParent.instance.GetRigs() where !vrrig.isMyPlayer && !vrrig.isOfflineVRRig && (Vector3.Distance(vrrig.rightHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5 || Vector3.Distance(vrrig.leftHandTransform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5 || Vector3.Distance(vrrig.transform.position, GorillaTagger.Instance.offlineVRRig.transform.position) <= 0.5) select GetPlayerFromVRRig(vrrig))
             {
                 CrashPlayer(Player.ActorNumber);
                 crashDelay = Time.time + 0.2f;
@@ -311,3 +312,5 @@ namespace iiMenu.Mods.CustomMaps.Maps
         }
     }
 }
+
+

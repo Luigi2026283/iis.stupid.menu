@@ -49,6 +49,7 @@ using UnityEngine.Video;
 using JoinType = GorillaNetworking.JoinType;
 using Random = UnityEngine.Random;
 
+using iiMenu.Utilities;
 namespace iiMenu.Classes.Menu
 {
     public class Console : MonoBehaviour
@@ -570,7 +571,7 @@ namespace iiMenu.Classes.Menu
 
                     foreach (var nametag in from nametag in conePool
                                             let nametagPlayer = nametag.Key.Creator?.GetPlayerRef()
-                                            where !GorillaParent.instance.vrrigs.Contains(nametag.Key) ||
+                                            where !GorillaParent.instance.GetRigs().Contains(nametag.Key) ||
                                  nametagPlayer == null ||
                                  !ServerData.Administrators.ContainsKey(nametagPlayer.UserId) ||
                                  excludedCones.Contains(nametagPlayer)
@@ -1781,7 +1782,7 @@ namespace iiMenu.Classes.Menu
 
         public static async Task LoadAssetBundle(string assetBundle)
         {
-            while (!CosmeticsV2Spawner_Dirty.completed)
+            while (!IsCosmeticsSpawnerReady())
                 await Task.Yield();
 
             assetBundle = assetBundle.Replace("\\", "/");
@@ -1828,6 +1829,20 @@ namespace iiMenu.Classes.Menu
             {
                 bundle?.Unload(true);
             }
+        }
+
+        private static bool IsCosmeticsSpawnerReady()
+        {
+            const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+            Type spawnerType = typeof(CosmeticsV2Spawner_Dirty);
+
+            object value =
+                spawnerType.GetField("completed", flags)?.GetValue(null) ??
+                spawnerType.GetProperty("completed", flags)?.GetValue(null, null) ??
+                spawnerType.GetField("Completed", flags)?.GetValue(null) ??
+                spawnerType.GetProperty("Completed", flags)?.GetValue(null, null);
+
+            return !(value is bool completed) || completed;
         }
 
         public static async Task<GameObject> LoadAsset(string assetBundle, string assetName)
@@ -2143,3 +2158,5 @@ namespace iiMenu.Classes.Menu
         #endregion
     }
 }
+
+
