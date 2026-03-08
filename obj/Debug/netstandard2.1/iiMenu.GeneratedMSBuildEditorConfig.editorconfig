@@ -1,6 +1,6 @@
 is_global = true
 build_property.RootNamespace = iiMenu
-build_property.ProjectDir = C:\Users\wfe\source\repos\iis.stupid.menu\
+build_property.ProjectDir = c:\Users\wfe\source\repos\iis.stupid.menu\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.CsWinRTUseWindowsUIXamlProjections = false

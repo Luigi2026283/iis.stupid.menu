@@ -557,6 +557,12 @@ namespace iiMenu.Menu
                     pcMenuAnimating = false;
                 }
 
+                if (!XRSettings.isDeviceActive)
+                {
+                    Cursor.visible = false;
+                    Cursor.lockState = CursorLockMode.Locked;
+                }
+
                 uiPrefab.SetActive(false);
                 if (pcMenuBackground != null)
                     pcMenuBackground.gameObject.SetActive(false);
@@ -584,11 +590,24 @@ namespace iiMenu.Menu
             {
                 if (File.Exists(hideGUIPath))
                     File.Delete(hideGUIPath);
+
+                if (!XRSettings.isDeviceActive)
+                {
+                    bool holdRightMouseToLook = UnityInput.Current.GetKey(KeyCode.Mouse1);
+                    Cursor.visible = !holdRightMouseToLook;
+                    Cursor.lockState = holdRightMouseToLook ? CursorLockMode.Locked : CursorLockMode.None;
+                }
             }
             else
             {
                 if (!File.Exists(hideGUIPath))
                     File.WriteAllText(hideGUIPath, "Text file generated with ii's Stupid Menu");
+
+                if (!XRSettings.isDeviceActive)
+                {
+                    Cursor.visible = false;
+                    Cursor.lockState = CursorLockMode.Locked;
+                }
             }
 
             GameObject closeMessage = uiPrefab.transform.Find("Canvas")?.Find("HideMessage")?.gameObject;

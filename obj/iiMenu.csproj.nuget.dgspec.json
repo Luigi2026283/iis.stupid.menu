@@ -10,7 +10,7 @@
         "projectUniqueName": "C:\\Users\\wfe\\source\\repos\\iis.stupid.menu\\iiMenu.csproj",
         "projectName": "ii's Stupid Menu",
         "projectPath": "C:\\Users\\wfe\\source\\repos\\iis.stupid.menu\\iiMenu.csproj",
-        "packagesPath": "c:\\Users\\wfe\\source\\repos\\iis.stupid.menu\\.dotnet_home\\.nuget\\packages\\",
+        "packagesPath": "C:\\Users\\wfe\\.nuget\\packages\\",
         "outputPath": "C:\\Users\\wfe\\source\\repos\\iis.stupid.menu\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [

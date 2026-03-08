@@ -1871,6 +1871,7 @@ namespace iiMenu.Mods
             }
 
             bool anyMove = w || a || s || d || space || ctrl;
+            bool lookingWithMouse = UnityInput.Current.GetKey(KeyCode.Mouse1);
             if (stationary || anyMove)
                 StopLocalVelocity();
 
@@ -1901,7 +1902,8 @@ namespace iiMenu.Mods
                 TranslateLocalPlayer(move * (Time.deltaTime * speed));
 
             Rigidbody body = GorillaTagger.Instance?.rigidbody;
-            if (!anyMove && lastPosition != Vector3.zero && stationary && body != null)
+            bool shouldHoldPosition = stationary && !anyMove && !lookingWithMouse;
+            if (shouldHoldPosition && lastPosition != Vector3.zero && body != null)
                 body.transform.position = lastPosition;
             else if (body != null)
                 lastPosition = body.transform.position;
